@@ -2,6 +2,11 @@
 
 ## 👉🏻 CosyVoice 👈🏻
 
+> [!NOTE]
+> This repository is a personal fork of [FunAudioLLM/CosyVoice](https://github.com/FunAudioLLM/CosyVoice).
+> Only the local WebUI workflow has been modified in this fork, mainly for CosyVoice3 0.5B local usage, segmented generation preview, progress display, cancellation request, and browser audio playback/download improvements.
+> See [MODIFICATIONS.md](./MODIFICATIONS.md) for details.
+
 **Fun-CosyVoice 3.0**: [Demos](https://funaudiollm.github.io/cosyvoice3/); [Paper](https://arxiv.org/pdf/2505.17589); [Modelscope](https://www.modelscope.cn/models/FunAudioLLM/Fun-CosyVoice3-0.5B-2512); [Huggingface](https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512); [CV3-Eval](https://github.com/FunAudioLLM/CV3-Eval)
 
 **CosyVoice 2.0**: [Demos](https://funaudiollm.github.io/cosyvoice2/); [Paper](https://arxiv.org/pdf/2412.10117); [Modelscope](https://www.modelscope.cn/models/iic/CosyVoice2-0.5B); [HuggingFace](https://huggingface.co/FunAudioLLM/CosyVoice2-0.5B)
