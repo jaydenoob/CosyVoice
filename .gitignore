@@ -31,6 +31,11 @@ __pycache__/
 # macOS dir files
 .DS_Store
 
+.venv/
+venv/
+webui_outputs/
+outputs/
+
 exp
 data
 raw_wav
@@ -43,10 +48,13 @@ compile_commands.json
 
 # train/inference files
 *.wav
+*.mp3
+*.flac
 *.m4a
 *.aac
 *.pt
 pretrained_models/*
+pretrained_models/
 *_pb2_grpc.py
 *_pb2.py
 *.tar
