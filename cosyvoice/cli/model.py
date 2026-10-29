@@ -22,8 +22,9 @@ from torch.nn import functional as F
 from contextlib import nullcontext
 import uuid
 from cosyvoice.utils.common import fade_in_out
-from cosyvoice.utils.file_utils import convert_onnx_to_trt, export_cosyvoice2_vllm
+from cosyvoice.utils.file_utils import convert_onnx_to_trt, export_cosyvoice2_vllm, logging
 from cosyvoice.utils.common import TrtContextWrapper
+from cosyvoice.utils.device import get_inference_device
 
 
 class CosyVoiceModel:
@@ -33,7 +34,8 @@ class CosyVoiceModel:
                  flow: torch.nn.Module,
                  hift: torch.nn.Module,
                  fp16: bool = False):
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.device = get_inference_device()
+        logging.info('inference device=%s', self.device)
         self.llm = llm
         self.flow = flow
         self.hift = hift
@@ -52,7 +54,7 @@ class CosyVoiceModel:
         # rtf and decoding related
         self.stream_scale_factor = 1
         assert self.stream_scale_factor >= 1, 'stream_scale_factor should be greater than 1, change it according to your actual rtf'
-        self.llm_context = torch.cuda.stream(torch.cuda.Stream(self.device)) if torch.cuda.is_available() else nullcontext()
+        self.llm_context = torch.cuda.stream(torch.cuda.Stream(self.device)) if self.device.type == 'cuda' else nullcontext()
         self.lock = threading.Lock()
         # dict used to store session related variable
         self.tts_speech_token_dict = {}
@@ -151,7 +153,7 @@ class CosyVoiceModel:
             hift_cache_mel, hift_cache_source = self.hift_cache_dict[uuid]['mel'], self.hift_cache_dict[uuid]['source']
             tts_mel = torch.concat([hift_cache_mel, tts_mel], dim=2)
         else:
-            hift_cache_source = torch.zeros(1, 1, 0)
+            hift_cache_source = torch.zeros(1, 1, 0, device=self.device)
         # keep overlap mel and hift cache
         if finalize is False:
             self.mel_overlap_dict[uuid] = tts_mel[:, :, -self.mel_overlap_len:]
@@ -182,8 +184,8 @@ class CosyVoiceModel:
         with self.lock:
             self.tts_speech_token_dict[this_uuid], self.llm_end_dict[this_uuid] = [], False
             self.hift_cache_dict[this_uuid] = None
-            self.mel_overlap_dict[this_uuid] = torch.zeros(1, 80, 0)
-            self.flow_cache_dict[this_uuid] = torch.zeros(1, 80, 0, 2)
+            self.mel_overlap_dict[this_uuid] = torch.zeros(1, 80, 0, device=self.device)
+            self.flow_cache_dict[this_uuid] = torch.zeros(1, 80, 0, 2, device=self.device)
         if source_speech_token.shape[1] == 0:
             p = threading.Thread(target=self.llm_job, args=(text, prompt_text, llm_prompt_speech_token, llm_embedding, this_uuid))
         else:
@@ -237,7 +239,7 @@ class CosyVoiceModel:
             self.mel_overlap_dict.pop(this_uuid)
             self.hift_cache_dict.pop(this_uuid)
             self.flow_cache_dict.pop(this_uuid)
-        if torch.cuda.is_available():
+        if self.device.type == 'cuda':
             torch.cuda.empty_cache()
             torch.cuda.current_stream().synchronize()
 
@@ -249,7 +251,8 @@ class CosyVoice2Model(CosyVoiceModel):
                  flow: torch.nn.Module,
                  hift: torch.nn.Module,
                  fp16: bool = False):
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.device = get_inference_device()
+        logging.info('inference device=%s', self.device)
         self.llm = llm
         self.flow = flow
         self.hift = hift
@@ -266,7 +269,7 @@ class CosyVoice2Model(CosyVoiceModel):
         # speech fade in out
         self.speech_window = np.hamming(2 * self.source_cache_len)
         # rtf and decoding related
-        self.llm_context = torch.cuda.stream(torch.cuda.Stream(self.device)) if torch.cuda.is_available() else nullcontext()
+        self.llm_context = torch.cuda.stream(torch.cuda.Stream(self.device)) if self.device.type == 'cuda' else nullcontext()
         self.lock = threading.Lock()
         # dict used to store session related variable
         self.tts_speech_token_dict = {}
@@ -306,7 +309,7 @@ class CosyVoice2Model(CosyVoiceModel):
             hift_cache_mel, hift_cache_source = self.hift_cache_dict[uuid]['mel'], self.hift_cache_dict[uuid]['source']
             tts_mel = torch.concat([hift_cache_mel, tts_mel], dim=2)
         else:
-            hift_cache_source = torch.zeros(1, 1, 0)
+            hift_cache_source = torch.zeros(1, 1, 0, device=self.device)
         # keep overlap mel and hift cache
         if finalize is False:
             tts_speech, tts_source = self.hift.inference(speech_feat=tts_mel, cache_source=hift_cache_source)
@@ -389,7 +392,7 @@ class CosyVoice2Model(CosyVoiceModel):
             self.tts_speech_token_dict.pop(this_uuid)
             self.llm_end_dict.pop(this_uuid)
             self.hift_cache_dict.pop(this_uuid)
-        if torch.cuda.is_available():
+        if self.device.type == 'cuda':
             torch.cuda.empty_cache()
             torch.cuda.current_stream().synchronize()
 
@@ -401,7 +404,8 @@ class CosyVoice3Model(CosyVoice2Model):
                  flow: torch.nn.Module,
                  hift: torch.nn.Module,
                  fp16: bool = False):
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.device = get_inference_device()
+        logging.info('inference device=%s', self.device)
         self.llm = llm
         self.flow = flow
         self.hift = hift
@@ -413,7 +417,7 @@ class CosyVoice3Model(CosyVoice2Model):
         self.stream_scale_factor = 2
         assert self.stream_scale_factor >= 1, 'stream_scale_factor should be greater than 1, change it according to your actual rtf'
         # rtf and decoding related
-        self.llm_context = torch.cuda.stream(torch.cuda.Stream(self.device)) if torch.cuda.is_available() else nullcontext()
+        self.llm_context = torch.cuda.stream(torch.cuda.Stream(self.device)) if self.device.type == 'cuda' else nullcontext()
         self.lock = threading.Lock()
         # dict used to store session related variable
         self.tts_speech_token_dict = {}

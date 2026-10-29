@@ -67,13 +67,26 @@ def change_instruction(mode_checkbox_group):
     return instruct_dict[mode_checkbox_group]
 
 
-def ensure_endofprompt(text):
+def format_cosyvoice3_prompt_text(text):
     token = '<|endofprompt|>'
     text = text.strip()
     if text == '':
         return text
     if token in text:
         return text
+    return 'You are a helpful assistant.' + token + text
+
+
+def format_cosyvoice3_instruction(text):
+    token = '<|endofprompt|>'
+    text = text.strip()
+    if text == '':
+        return text
+    if token in text:
+        return text
+    prefix = 'You are a helpful assistant.'
+    if not text.startswith(prefix):
+        text = prefix + ' ' + text
     return text + token
 
 
@@ -235,12 +248,12 @@ def generate_audio(tts_text, mode_checkbox_group, sft_dropdown, prompt_text, pro
             if prompt_text == '':
                 yield fail('prompt字幕为空，您是否忘记输入prompt字幕？')
                 return
-            prompt_text = ensure_endofprompt(prompt_text)
+            prompt_text = format_cosyvoice3_prompt_text(prompt_text)
         elif mode_checkbox_group == '自然语言控制':
             if instruct_text == '':
                 yield fail('您正在使用自然语言控制模式, 请输入instruct文本')
                 return
-            instruct_text = ensure_endofprompt(instruct_text)
+            instruct_text = format_cosyvoice3_instruction(instruct_text)
         elif mode_checkbox_group == '跨语种复刻':
             if instruct_text != '':
                 gr.Info('您正在使用跨语种复刻模式, instruct文本会被忽略')
@@ -376,12 +389,8 @@ def generate_audio(tts_text, mode_checkbox_group, sft_dropdown, prompt_text, pro
                     estimate = update_estimate(completed, total_segments, start_time)
                     current_progress = progress_text(completed, total_segments, start_time, estimate)
                     logging.info(current_progress)
-                    notification = None
-                    if completed >= total_segments:
-                        gr.Info('音频生成完成')
-                        notification = ensure_notification_audio()
                     last_audio_path = save_audio(np.concatenate(audio_chunks), cosyvoice.sample_rate)
-                    yield gr.update(value=last_audio_path), current_progress, notification
+                    yield gr.update(value=last_audio_path), current_progress, None
                     continue
 
                 if event == 'done':
@@ -396,24 +405,24 @@ def generate_audio(tts_text, mode_checkbox_group, sft_dropdown, prompt_text, pro
             if completed == 0:
                 yield None, progress_text(0, total_segments, start_time), None
             elif last_audio_path is not None:
-                yield gr.update(value=last_audio_path), progress_text(completed, total_segments, start_time, estimate), gr.skip()
+                gr.Info('音频生成完成')
+                yield gr.update(value=last_audio_path), progress_text(completed, completed, start_time), ensure_notification_audio()
             return
 
+        audio_chunks = []
         completed = 0
-        estimate = None
         for chunk in chunk_iter():
             if cancel_event.is_set():
-                yield gr.skip(), cancel_progress_text(completed, total_segments, start_time), None
+                yield gr.skip(), '已请求中断生成，已生成 {} 个音频片段'.format(completed), None
                 return
             completed += 1
-            estimate = update_estimate(completed, total_segments, start_time)
-            current_progress = progress_text(completed, total_segments, start_time, estimate)
+            audio_chunks.append(chunk)
+            current_progress = '已生成 {} 个音频片段，已运行 {}'.format(completed, format_duration(time.time() - start_time))
             logging.info(current_progress)
-            notification = None
-            if completed >= total_segments:
-                gr.Info('音频生成完成')
-                notification = ensure_notification_audio()
-            yield gr.update(value=save_audio(chunk, cosyvoice.sample_rate)), current_progress, notification
+            yield gr.update(value=save_audio(np.concatenate(audio_chunks), cosyvoice.sample_rate)), current_progress, None
+        if completed > 0:
+            gr.Info('音频生成完成')
+            yield gr.skip(), '生成完成，共 {} 个音频片段，已运行 {}'.format(completed, format_duration(time.time() - start_time)), ensure_notification_audio()
     except Exception as e:
         logging.exception('generation failed')
         yield None, '生成失败: {}'.format(e), None
@@ -453,8 +462,8 @@ def main():
         with gr.Row():
             prompt_wav_upload = gr.Audio(sources='upload', type='filepath', label='选择prompt音频文件，注意采样率不低于16khz')
             prompt_wav_record = gr.Audio(sources='microphone', type='filepath', label='录制prompt音频文件')
-        prompt_text = gr.Textbox(label="输入prompt文本", lines=1, placeholder="请输入prompt文本", value='')
-        instruct_text = gr.Textbox(label="输入instruct文本", lines=1, placeholder="请输入instruct文本", value='')
+        prompt_text = gr.Textbox(label="输入prompt文本", lines=1, placeholder="请填写参考音频中实际说出的文字", value='')
+        instruct_text = gr.Textbox(label="输入instruct文本", lines=1, placeholder="例如：请用四川话表达。", value='')
 
         with gr.Row():
             generate_button = gr.Button("生成音频")
@@ -490,9 +499,9 @@ if __name__ == '__main__':
     MODEL_NAME = cosyvoice.__class__.__name__
     if MODEL_IS_COSYVOICE3:
         instruct_dict.update({
-            '3s极速复刻': '1. 选择prompt音频文件，或录入prompt音频，注意不超过30s，若同时提供，优先选择prompt音频文件\n2. 输入prompt文本\n3. 点击生成音频按钮',
+            '3s极速复刻': '1. 选择prompt音频文件，或录入prompt音频，注意不超过30s，若同时提供，优先选择prompt音频文件\n2. 准确填写prompt音频中说出的文本\n3. 点击生成音频按钮；此模式可尝试保留更多参考语音的说话方式，但不会精确复制节奏',
             '跨语种复刻': '1. 选择prompt音频文件，或录入prompt音频，注意不超过30s，若同时提供，优先选择prompt音频文件\n2. 点击生成音频按钮',
-            '自然语言控制': '1. 选择prompt音频文件，或录入prompt音频，注意不超过30s，若同时提供，优先选择prompt音频文件\n2. 输入instruct文本\n3. 点击生成音频按钮',
+            '自然语言控制': '1. 选择prompt音频文件，或录入prompt音频，注意不超过30s，若同时提供，优先选择prompt音频文件\n2. 输入instruct文本，可描述语速、情绪或方言\n3. 点击生成音频按钮；参考音频主要提供音色，模型不会精确复制它的停顿和节奏',
         })
 
     sft_spk = cosyvoice.list_available_spks()

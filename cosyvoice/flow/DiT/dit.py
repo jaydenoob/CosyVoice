@@ -59,7 +59,7 @@ class TextEmbedding(nn.Module):
         # possible extra modeling
         if self.extra_modeling:
             # sinus pos emb
-            batch_start = torch.zeros((batch,), dtype=torch.long)
+            batch_start = torch.zeros((batch,), dtype=torch.long, device=text.device)
             pos_idx = get_pos_embed_indices(batch_start, seq_len, max_pos=self.precompute_max_pos)
             text_pos_embed = self.freqs_cis[pos_idx]
             text = text + text_pos_embed

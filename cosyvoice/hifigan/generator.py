@@ -489,20 +489,26 @@ class HiFTGenerator(nn.Module):
             l.remove_weight_norm()
 
     def _stft(self, x):
+        device = x.device
+        if device.type == 'mps':
+            x = x.cpu()  # MPS does not support complex STFT tensors.
         spec = torch.stft(
             x,
             self.istft_params["n_fft"], self.istft_params["hop_len"], self.istft_params["n_fft"], window=self.stft_window.to(x.device),
             return_complex=True)
         spec = torch.view_as_real(spec)  # [B, F, TT, 2]
-        return spec[..., 0], spec[..., 1]
+        return spec[..., 0].to(device), spec[..., 1].to(device)
 
     def _istft(self, magnitude, phase):
+        device = magnitude.device
+        if device.type == 'mps':
+            magnitude, phase = magnitude.cpu(), phase.cpu()
         magnitude = torch.clip(magnitude, max=1e2)
         real = magnitude * torch.cos(phase)
         img = magnitude * torch.sin(phase)
         inverse_transform = torch.istft(torch.complex(real, img), self.istft_params["n_fft"], self.istft_params["hop_len"],
                                         self.istft_params["n_fft"], window=self.stft_window.to(magnitude.device))
-        return inverse_transform
+        return inverse_transform.to(device)
 
     def decode(self, x: torch.Tensor, s: torch.Tensor = torch.zeros(1, 1, 0)) -> torch.Tensor:
         s_stft_real, s_stft_imag = self._stft(s.squeeze(1))
@@ -713,8 +719,14 @@ class CausalHiFTGenerator(HiFTGenerator):
     @torch.inference_mode()
     def inference(self, speech_feat: torch.Tensor, finalize: bool = True) -> torch.Tensor:
         # mel->f0 NOTE f0_predictor precision is crucial for causal inference, move self.f0_predictor to cpu if necessary
+        if speech_feat.device.type == 'mps':
+            # Transfer before converting dtype; MPS cannot represent float64 even during .to(cpu, dtype=...).
+            self.f0_predictor.cpu()
+            f0_input = speech_feat.cpu()
+        else:
+            f0_input = speech_feat
         self.f0_predictor.to(torch.float64)
-        f0 = self.f0_predictor(speech_feat.to(torch.float64), finalize=finalize).to(speech_feat)
+        f0 = self.f0_predictor(f0_input.to(torch.float64), finalize=finalize).to(speech_feat)
         # f0->source
         s = self.f0_upsamp(f0[:, None]).transpose(1, 2)  # bs,n,t
         s, _, _ = self.m_source(s)

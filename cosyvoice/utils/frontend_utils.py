@@ -101,15 +101,22 @@ def split_paragraph(text: str, tokenize, lang="zh", token_max_n=80, token_min_n=
             else:
                 st = i + 1
 
+    # A long sentence without punctuation must not bypass the model's segment limit.
+    if lang == "zh":
+        split_utts = []
+        for utt in utts:
+            split_utts.extend(utt[i:i + token_max_n] for i in range(0, len(utt), token_max_n))
+        utts = split_utts
+
     final_utts = []
     cur_utt = ""
     for utt in utts:
-        if calc_utt_length(cur_utt + utt) > token_max_n and calc_utt_length(cur_utt) > token_min_n:
+        if cur_utt and calc_utt_length(cur_utt + utt) > token_max_n:
             final_utts.append(cur_utt)
             cur_utt = ""
         cur_utt = cur_utt + utt
     if len(cur_utt) > 0:
-        if should_merge(cur_utt) and len(final_utts) != 0:
+        if should_merge(cur_utt) and len(final_utts) != 0 and calc_utt_length(final_utts[-1] + cur_utt) <= token_max_n:
             final_utts[-1] = final_utts[-1] + cur_utt
         else:
             final_utts.append(cur_utt)

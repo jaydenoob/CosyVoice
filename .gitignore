@@ -32,6 +32,8 @@ __pycache__/
 .DS_Store
 
 .venv/
+.venv-arm64/
+.tmp/
 venv/
 webui_outputs/
 outputs/

@@ -20,4 +20,8 @@ This fork focuses on local WebUI usability improvements:
 - Improved prompt-audio preparation and error handling for browser-uploaded
   files.
 
+- Added Apple Silicon MPS inference support with CPU fallbacks for unsupported operations.
+- Corrected CosyVoice 3 prompt and instruction formatting.
+- Preserved accumulated streaming audio and split long unpunctuated Chinese text.
+
 This fork is not an official CosyVoice distribution.

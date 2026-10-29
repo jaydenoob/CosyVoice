@@ -183,6 +183,13 @@ Please see the demo website for details.
 python3 webui.py --port 50000 --model_dir pretrained_models/CosyVoice-300M
 ```
 
+On Apple Silicon, the inference model uses MPS automatically when PyTorch reports it available. ONNX preprocessing and the vocoder's double-precision/complex operations still run on CPU. To require MPS (and fail early if it is unavailable), or to force CPU, set `COSYVOICE_DEVICE`:
+
+```sh
+COSYVOICE_DEVICE=mps python3 webui.py --port 50000 --model_dir pretrained_models/Fun-CosyVoice3-0.5B
+# COSYVOICE_DEVICE=cpu python3 webui.py --port 50000 --model_dir pretrained_models/Fun-CosyVoice3-0.5B
+```
+
 #### Advanced Usage
 
 For advanced users, we have provided training and inference scripts in `examples/libritts`.
